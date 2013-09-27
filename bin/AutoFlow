@@ -1,0 +1,90 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+
+require 'autoflow'
+#################################################################################################
+# INPUT PARSING
+#################################################################################################
+options = {}
+
+optparse = OptionParser.new do |opts|
+        options[:workflow] = FALSE
+        opts.on( '-w', '--workflow FILE', 'Input workflow file' ) do |workflow|
+                options[:workflow] = workflow
+        end
+
+        options[:use_multinode] = 0 
+        opts.on( '-u', '--use_multinode INTEGER', 'For use several nodes on execution' ) do |use_multinode|
+                options[:use_multinode] = use_multinode
+        end
+
+	options[:retry] = FALSE
+        opts.on( '-r', '--retry', 'input workflow file' ) do 
+                options[:retry] = TRUE
+        end
+
+        options[:node_type] = nil
+        opts.on( '-n', '--node_type STRING', 'Apply constraint attribute to tasks' ) do |node_type|
+                options[:node_type] = node_type
+        end
+
+        options[:exp_cpu] = 0
+        opts.on( '-e', '--exp_cpu INTEGER', 'Exponent of cpu assigment series' ) do |exp_cpu|
+                options[:exp_cpu] = exp_cpu.to_i
+        end
+
+        options[:cpus] = 16
+        opts.on( '-c', '--cpus INTEGER', 'Max cpus can be used in all workflow' ) do |cpus|
+                options[:cpus] = cpus.to_i
+        end
+
+        options[:time] = '20:00:00'
+        opts.on( '-t', '--time STRING', 'Max time that can be needed in a task' ) do |time|
+                options[:time] = time
+        end
+
+        options[:memory] = '4gb'
+        opts.on( '-m', '--memory STRING', 'Max memory can be used in a task' ) do |mem|
+                options[:memory] = mem
+        end
+
+        # Set a banner, displayed at the top of the help screen.
+        opts.banner = "Usage: AutoFlow.rb -w worflow_file -c n_cpus \n\n"
+
+        # This displays the help screen
+        opts.on( '-h', '--help', 'Display this screen' ) do
+                puts opts
+                exit
+        end
+
+end # End opts
+
+# parse options and remove from ARGV
+optparse.parse!
+
+if !options[:workflow] 
+	puts 'Workflow file not especified'
+	Process.exit(-1)
+end
+
+#################################################################################################
+# MAIN
+#################################################################################################
+exec_folder=File.join(Dir.pwd,'exec')
+if !File.exists?(exec_folder)
+	Dir.mkdir(exec_folder)
+end
+
+#--------------------------------------------------------------------------------
+# Flow parse
+#--------------------------------------------------------------------------------
+stack=Stack.new(exec_folder,options)
+
+#stack.inspect
+#--------------------------------------------------------------------------------
+# Flow exec
+#--------------------------------------------------------------------------------
+stack.exec
+
+
