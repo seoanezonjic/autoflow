@@ -1,0 +1,23 @@
+#! /usr/bin/env ruby
+
+# Parse enviroment variables file
+new_values = {}
+env_path = '../env_file'
+if !File.exists?(env_path)
+	env_path ='env_path'
+	if !File.exists?(env_path)
+		raise 'Enviroment file not found'
+	end
+end
+pairs = File.open(env_path).read.scan(/export ([^=]+)=([\S]+)/)
+pairs.map{|pair| new_values[pair.first] = pair.last}
+
+# Change enviroment variables (Commandline must be 'var=value;var1=value2...varN=valueN;')
+ARGV[0].scan(/([^=]+)=([^;]+);/).map{|new_pair| new_values[new_pair.first]=new_pair.last}
+
+# Save modified enviroment variables
+new_enviroment = File.open(env_path,'w')
+new_values.each do |env_var, value|
+	new_enviroment.puts "export #{env_var}=#{value}"
+end
+new_enviroment.close

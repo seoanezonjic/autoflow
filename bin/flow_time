@@ -1,0 +1,52 @@
+#! /usr/bin/env ruby
+require 'scbi_plot'
+
+times = {}
+task = nil
+status = nil
+beg_time = Time.now
+end_time = Time.new(0)
+File.open(ARGV[0]).read.each_line do |line|
+	line.chomp!
+	description, date = line.split("\t")
+	status, task, program = description.split(' ')
+	day, month, n_day, time, mode, year = date.split(' ')
+	hours, minutes, seconds = time.split(':') 
+	task_time = Time.local(year.to_i, month, n_day.to_i, hours.to_i, minutes.to_i, seconds.to_i)
+	if task_time > end_time
+		end_time = task_time
+	end
+	if task_time < beg_time
+		beg_time = task_time
+	end
+	if status == 'STARTED'
+		times[task] = [task_time]
+	else
+		times[task] << task_time
+	end
+end
+
+tag_task = []
+plot_times = [] 
+total_time = (end_time - beg_time).to_i/3600.0
+tag_task << 'Total_time'
+plot_times << total_time
+puts "Total time: #{total_time} hours"
+times.each do |task, interval|
+	if interval.length == 2
+		task_time = (interval.last - interval.first).to_i/3600.0
+		tag_task << task
+		plot_times << task_time
+		puts "#{task}\t#{task_time} hours"
+	else
+		puts "#{task}\tStarted at #{interval.first}. Currently running"
+	end
+end
+
+# create Histogram
+tag_task.map!{|tag| tag.gsub('e','\\e')}
+tag_task.map!{|tag| tag.gsub('E','\\E')}
+p=ScbiPlot::Histogram.new('time_graph.png','Flow stats (hours)')
+p.add_x(tag_task) 
+p.add_y(plot_times)
+p.do_graph
