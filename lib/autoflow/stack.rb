@@ -1,253 +1,301 @@
 require 'program'
+require 'batch'
+
+require 'win32console' if !ENV['OS'].nil? && ENV['OS'].downcase.include?('windows')
+require 'colorize'
 class Stack
-	
-	def initialize(exec_folder,options)
-		@exec_folder=exec_folder
-		@file_workflow=options[:workflow]
-		@cpus=options[:cpus]
-		@time=options[:time]
-		@memory=options[:memory]
-		@commands={}
-		@dirs=[]
-		@node_type=options[:node_type]
-		@exp_cpu=options[:exp_cpu]
-		@count_cpu=0
-		@use_multinode = options[:use_multinode]
-		parse(options[:workflow], options[:retry])
+	attr_accessor :jobs, :exec_folder, :persist_variables
+
+##########################################################################################
+## PARSE TEMPLATE
+##########################################################################################
+	def initialize(exec_folder, options)
+		Batch.set_general_attrib({
+			:cpu => options[:cpus], 
+			:mem => options[:memory], 
+			:time => options[:time],
+			:node => options[:node_type],
+			:multinode => options[:use_multinode],
+			:ntask => options[:use_ntasks]
+		})
+		@@folder_name = :program_name
+		@@folder_name = :job_name if options[:key_name]
+		@commands = {}	
+		@variables = {}
+		@persist_variables = {}
+		@@all_jobs_relations = {}
+		@exec_folder = exec_folder #TODO move this to queue_manager
+		@do_retry = options[:retry]
+		@options = options
+		parse(options[:workflow], options[:Variables])
+		@jobs = get_jobs_relations
 	end
 	
-	def parse(file_workflow, do_retry)
-		count=0
-		File.open(file_workflow).each do |line|
-			line.chomp!
-			if line =~/^#/ || line.empty? #Saltar lineas en blanco y comentarios
-				next
-			end
-			fields=line.split("\t")
-			prog_parameters=fields[1].split(' ',2)		
-			folder=asign_folder(prog_parameters[0])			
-			done=FALSE
-			iterated=FALSE
-			end_tasks_buffer=TRUE
-			if fields[0]=~ /\!/
-				folder=@exec_folder
-			end
-			if fields[0]=~ /-/
-				end_tasks_buffer=FALSE
-				folder=@exec_folder
-			end
-			if fields[0]=~ /\+/
-				iterated=TRUE
-			end
-			if fields[0]=~ /\%/
-				done=TRUE
-			end
-			fields[0].gsub!(/\+|-|\!|\%/,'')# Delete function characters
-			#Dependencies
-			parameters, dependencies = parse_parameters(prog_parameters[1])
-			initialization, init_dependencies = parse_parameters(fields[2])
-			all_dependencies= dependencies + init_dependencies
-			command_line=prog_parameters[0]+' '+parameters
-			add_program(fields[0], prog_parameters[0], command_line, initialization, iterated, folder, all_dependencies, done, end_tasks_buffer)
-		end
-	end
+	def parse(workflow, external_variables)
+		#Clean template
+		workflow.gsub!(/\#.+$/,'')	#Delete comments
+		workflow.gsub!("\t",'')		#Drop tabs
+		workflow.gsub!(/\n+/,"\n")	#Drop empty lines
+		workflow.gsub!(/^\s*/,'')
 
+		#Parse template
+		variables_lines = []
+		persist_variables_lines = []
+		node_lines = []
 
-	def add_program(stage_id, name, parameters, initialization, iterated, exec_folder_program, dependencies, done, end_tasks_buffer)
-		task=Program.new(name, parameters, initialization, iterated, exec_folder_program, dependencies, done, end_tasks_buffer)
-		@commands[stage_id]=task
-		return task
-	end
-
-	def parse_parameters(orig_param)
-		dependencies=[]
-		if !orig_param.nil?
-			@commands.keys.each do |stage_id|
-				if orig_param.include?(stage_id)
-					dependencies << stage_id
+		node_beg = FALSE		
+		workflow.each_line do |line|
+			node_beg = TRUE if line.include?('{') 	# This check the context of a variable
+			if line.include?('}')					# if a variable is within a node,
+				if node_beg							# we consider tha is a bash variable not a static autoflow variable
+					node_beg = FALSE
+				else
+					node_beg = TRUE
 				end
-				orig_param.gsub!(stage_id, @commands[stage_id].exec_folder_program) #Change id task to folder task
 			end
-			if orig_param.include?(')')
-				raise 'Missed dependency on: ' + orig_param
+			if line =~ /^\$/ && !node_beg
+				variables_lines << line
+			elsif line =~ /^\@/
+				persist_variables_lines << line.gsub('@','')
+			else
+				node_lines << line
 			end
 		end
-		return orig_param, dependencies
+		load_variables(variables_lines, @variables)
+		load_variables(external_variables, @variables)
+		load_variables(persist_variables_lines, @persist_variables)
+		parse_nodes(node_lines)
 	end
+
+	def load_variables(variables_lines, variable_type)
+		if !variables_lines.nil?
+			variables_lines.each do |line|
+				line.chomp!
+				line.gsub!(/\s/,'')
+				pairs = line.split(',')
+				pairs.each do |pair|
+					pair =~ /(.+)=(.+)/
+					variable_type[$1] = $2
+				end
+			end
+		end
+	end
+
+	def scan_nodes(execution_lines)
+		template_executions = execution_lines.join('')
+		replace_variables(template_executions)
+		# $1 => tag, $2 => initialize, $3 => main command
+		#executions = template_executions.scan(/(^.+\))\s{0,}\{\s{0,}([^\?]{0,})\s{0,}\?\s([^\}]{1,})\s{0,}\}/)
+#=begin
+		executions = [] # tag, initialize, main_command
+		states = {} #name => [state, id(position)]
+					#t => tag, i => initialize , c => command
+		open_nodes = []
+		template_executions.each_line do |line|
+			line.strip! #Clean al whitespaces at beginning and the end of string
+			node = states[open_nodes.last] if !open_nodes.empty?
+			if line.empty?
+				next
+			# Create nodes and asign nodes states
+			#----------------------------------------
+			elsif line =~ /(\S*\)){$/ #Check tag and create node
+				name = $1
+				executions << [name, '', ''] # create node
+				states[name] = [:i, executions.length - 1]
+				open_nodes << name
+			elsif line == '?' #Check command
+				node[0] = :c
+			elsif line == '}' #Close node
+				finished_node = open_nodes.pop
+				if !open_nodes.empty?
+					parent_node = states[open_nodes.last].last #position
+					child_node = states[finished_node].last
+					parent_execution = executions[parent_node]
+					if parent_execution[2].class == String   
+						parent_execution[2] = [child_node]
+					else
+						parent_execution[2] << child_node
+					end
+				end
+			# Add lines to nodes
+			#----------------------
+			elsif states[open_nodes.last].first == :i #Add initialize line
+				executions[node.last][1] << line +"\n"
+			elsif states[open_nodes.last].first == :c #Add command line
+				executions[node.last][2] << line +"\n"			
+			end
+		end
+#=end
+		return executions
+	end
+
+	def replace_variables(string)
+		@variables.each do |name, value|
+			string.gsub!(name, value)
+		end
+	end
+
+	def parse_nodes(execution_lines)
+		dinamic_variables = []
+		nodes = scan_nodes(execution_lines)
+		nodes = create_ids(nodes)
+		
+		#nodes.each do |tag, init, command, index|
+		#	puts "#{tag.colorize(:red)}\t#{index}\n#{('-'*tag.length).colorize(:red)}\n#{init.chomp.colorize(:blue)}\n#{command.to_s.colorize(:green)}"
+		#end
+
+		nodes.each do |tag, init, command, index| #Takes the info of each node of workflow to create the job
+			# Set batch	
+			new_batch = Batch.new(tag, init, command, index, @exec_folder)
+			dinamic_variables.concat(new_batch.handle_dependencies(dinamic_variables))
+			@commands[new_batch.name] = new_batch
+		end
+
+		# link each parent batch to a child batch
+		@commands.each do |name, batch|
+			batch.asign_child_batch
+		end
+	end
+
+	def create_ids(nodes)
+		nodes.each_with_index do |node, i|
+			node << i
+		end
+		return nodes
+	end
+
+	def set_dependencies_path(job) #TODO move this to queue_manager
+		job.dependencies.sort{|d1, d2| d2.length <=> d1.length}.each do |dep|
+			path =  @@all_jobs_relations[dep]
+			job.initialization.gsub!(dep+')', path) if !job.initialization.nil?
+			job.parameters.gsub!(dep+')', path)
+		end
+	end
+
+	def asign_folder(job) #TODO move this to queue_manager
+		folder = nil
+		if job.attrib[:folder]
+			if @@folder_name == :program_name
+				program = File.join(job.attrib[:exec_folder], job.parameters.split(' ', 2).first) 			
+				count = 0
+				folder = program + "_#{"%04d" % count}"
+				while @@all_jobs_relations.values.include?(folder)
+					folder = program + "_#{"%04d" % count}"
+					count += 1
+				end
+			elsif @@folder_name == :job_name
+				folder = File.join(job.attrib[:exec_folder], job.name)
+			end
+		else
+			folder = job.attrib[:exec_folder]
+		end
+		@@all_jobs_relations[job.name.gsub(')','')] = folder
+		job.attrib[:exec_folder] = folder 
+	end
+	
+	def get_jobs
+		jobs =[]
+		@commands.each do |name, batch|
+			next if batch.has_jobs? #parent batch (intermediates)
+			batch.get_jobs.each do |j|
+				folder = asign_folder(j) #TODO move this to queue_manager
+				jobs << [j.name, j]
+			end
+
+		end
+		jobs.each do |j_name, job| #TODO move this to queue_manager
+			set_dependencies_path(job)
+			j_name.gsub!(')','') #Clean function characters on name
+			job.name.gsub!(')','')
+		end
+		return jobs
+	end
+
+
+	def get_jobs_relations
+		hash = {}
+		get_jobs.each do |name, job|
+			hash[name] = job
+		end
+		return hash
+	end
+
+	def comment_main_command
+		@jobs.each do |name, job|
+			job.parameters = "##{job.parameters}"
+		end
+	end
+##########################################################################################
+## WORKFLOW REPRESENTATION
+##########################################################################################
 
 	def inspect
-		@commands.each do |id, task|
-			puts "#{id}  |  #{task.inspect}" 
+		@jobs.each do |id, job|
+			puts "#{id} > #{job.inspect}\t#{job.attrib[:done]}\n\t\e[32m#{job.dependencies.join("\n\t")}\e[0m"
 		end
 	end
 
-	def exec
-		buffered_tasks=[]
-		index_execution = File.open('index_execution','w')							
-		@commands.each do |id, task|
-			index_execution.puts "#{id}\t#{task.exec_folder_program}"
-			if task.done
-				next
-			else
-				rm_done_dependencies(task)
-			end
-			if !File.exists?(task.exec_folder_program)
-				Dir.mkdir(task.exec_folder_program)
-			end
-			# Task execution within folder attibute
-			Dir.chdir(task.exec_folder_program) do
-				if !task.end_tasks_buffer # Buffer task if cmd
-					buffered_tasks << [id, task]
-				else # Launch with queue_system tasks and all buffered
-					launch_queue_system(id, task, buffered_tasks)
-					buffered_tasks=[]#Clean buffer
-				end
-			end
-		end
-		index_execution.close
-	end
-
-	def rm_done_dependencies(task)
-		remove=[]
-		task.dependencies.each do |dependency|
-			if @commands[dependency].done
-				remove << dependency
-			end
-		end
-		remove.each do |rm|
-			task.dependencies.delete(rm)
-		end
-	end
-
-	def launch_queue_system(id, task, buffered_tasks)
-		# Write sh file
-		#--------------------------------
-		log_folder=File.join(@exec_folder,'log')
-		sh=File.open(task.name+'.sh','w')
-		used_cpu=1
-		if !task.monocpu
-			if @exp_cpu == 0
-				used_cpu=@cpus
-			else
-				if @exp_cpu**(@count_cpu) < @cpus
-					@count_cpu +=1
-				end
-				used_cpu = @exp_cpu**@count_cpu
-			end 
-		end
-		contraint = nil
-		if !@node_type.nil?
-			constraint ='#SBATCH --constraint='+@node_type 
-		end	
-		sh.puts 	'#!/usr/bin/env bash',
-				'# The name to show in queue lists for this job:',
-				"##SBATCH -J #{task.name}.sh",
-				'# Number of desired cpus:'
-		if @use_multinode == 0
-			sh.puts "#SBATCH --cpus=#{used_cpu}"
+	def draw(name, name_type)
+		representation_type = '_structural'
+		representation_type = '_semantic' if name_type.include?('t')
+		if name_type.include?('b')
+			representation_type << '_simplified'
+			set = @commands
 		else
-			sh.puts "#SBATCH --tasks=#{used_cpu}",
-					"#SBATCH --nodes=#{@use_multinode}",
-					"srun hostname -s > workers"
+			set = @jobs
 		end
-		sh.puts	'# Amount of RAM needed for this job:',
-				"#SBATCH --mem=#{@memory}",
-				'# The time the job will be running:',
-				"#SBATCH --time=#{@time}",
-				'# To use GPUs you have to request them:',
-				'##SBATCH --gres=gpu:1',
-				"#{constraint}",
-				'# Set output and error files',
-				'#SBATCH --error=job.%J.err',
-				'#SBATCH --output=job.%J.out',
-				'# MAKE AN ARRAY JOB, SLURM_ARRAYID will take values from 1 to 100',
-				'##SARRAY --range=1-100',
-				'# To load some software (you can show the list with \'module avail\'):',
-				'# module load software',
-				'hostname',
-				"echo STARTED  #{id.gsub(')','')}  #{task.name} >> #{log_folder}",
-				"date >> #{log_folder}"
-		ar_dependencies=[]
-		ar_dependencies+=task.dependencies
-		ar_dependencies.delete(id) #Delete autodependency
+		name.gsub!(/\.\S+/,'')
+		file = File.open(name+representation_type+'.dot','w')
+		file.puts 'digraph G {', 'node[shape=box]'
+		all_dependencies = []
+		all_tag = []
+		set.each do |id, tag|
+			if name_type.include?('b')
+				tag_name = tag.main_command.split(' ').first+"_#{tag.id}"
+			else 
+				tag_name = File.basename(tag.attrib[:exec_folder])
+			end
+			tag_name = id if name_type.include?('t')
+			tag_name = tag_name + '(*)' if name_type.include?('b') && tag.iterator.length > 1
+			
+			all_tag << tag_name
+			if tag.dependencies.length > 0
+				tag.dependencies.each do |dependencie, type, string|
+					if name_type.include?('b')
+						dependencie_name = set[dependencie].main_command.split(' ').first+"_#{set[dependencie].id}"
+					else 
+						dependencie_name = File.basename(set[dependencie].attrib[:exec_folder])				
+					end
+					dependencie_name = dependencie if name_type.include?('t')
 
-		buffered_tasks.each do |id_buff_task,buff_task|
-			write_task(buff_task,sh)
-			ar_dependencies+=buff_task.dependencies
-			ar_dependencies.delete(id_buff_task) #Delete autodependency
-			buff_task.exec_folder_program=task.exec_folder_program
-		end
-		
-		write_task(task,sh)
-		sh.puts	"echo FINISHED  #{id.gsub(')','')}  #{task.name} >> #{log_folder}",
-				"date >> #{log_folder}"
-		sh.close
+					dependencie_name = dependencie_name + '(*)' if name_type.include?('b') && set[dependencie].iterator.length > 1
+					all_dependencies << dependencie_name
 
-		#Submitt task
-		#-----------------------------------
-		dependencies=nil
-		if !ar_dependencies.empty?
-			ar_dependencies.uniq!
-			queue_system_id_dependencies=get_queue_system_dependencies(ar_dependencies)
-			dependencies='--dependency=afterok:'+queue_system_id_dependencies.join(':')
-		end
-		cmd ="sbatch #{dependencies} #{task.name}.sh"
-		shell_output=%x[#{cmd}]
-		shell_output.chomp!
-		fields=shell_output.split(' ')
-		task.queue_id=fields[3] # Returns id of running task on queue system 
-		asign_queue_id(buffered_tasks,fields[3])
-	end
-
-	def write_task(task, sh)
-		if !task.initialization.nil?
-			sh.puts task.initialization
-		end
-		sh.print 'time '
-		used_cpu=1.to_s
-		if !task.monocpu
-			if @use_multinode == 0
-				used_cpu=@cpus.to_s
+					file.puts "\"#{dependencie_name}\"-> \"#{tag_name}\""
+				end
 			else
-				used_cpu = 'workers'
+				file.puts "\"#{tag_name}\"[color=black, peripheries=2, style=filled, fillcolor=yellow]"
 			end
 		end
-		task.parameters.gsub!('[cpu]',used_cpu) #Use asigned cpus
-		sh.puts task.parameters
-	end
-
-	def asign_folder(program_name)			
-		folder=File.join(@exec_folder,program_name)
-		count=0
-		folder_bk=folder
-		while @dirs.include?(folder_bk)
-			folder_bk=folder+'_'+count.to_s
-			count+=1
+		all_tag.keep_if{|tag| !all_dependencies.include?(tag)}
+		all_tag.each do |tag|
+			if name_type.include?('b')
+				if !name_type.include?('f')
+					tag = tag + '(*)'  if !tag.include?('(*)') && set[tag].iterator.length > 1
+				else
+					id = tag.reverse.split('_',2).first.reverse.to_i
+					batch = nil
+					set.each do |id,tag|
+						batch = tag if tag.id = id 
+					end
+					tag = tag + '(*)'  if batch.iterator.length > 1
+				end
+			end
+			file.puts "\"#{tag}\"[fontcolor=white, color=black, style=filled]"
 		end
-		@dirs << folder_bk
-		return folder_bk
+		file.puts '}'
+		file.close
+		system('dot -Tpng '+name+representation_type+'.dot -o '+name+representation_type+'.png')
 	end
 	
-	def get_dependencies(task)
-		dependencies=[]
-		task.dependencies.each do |dep|
-			dependencies << @commands[dep].queue_id
-		end
-		return dependencies
-	end
-
-	def asign_queue_id(ar_tasks,id)
-		ar_tasks.each do |id_ar_task, ar_task|
-			ar_task.queue_id=id
-		end
-	end
-	
-	def get_queue_system_dependencies(ar_dependencies)
-		queue_system_ids=[]
-		ar_dependencies.each do |dependency|
-			puts dependency
-			queue_system_ids << @commands[dependency].queue_id
-		end
-		return queue_system_ids
-	end
 end

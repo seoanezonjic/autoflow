@@ -1,27 +1,130 @@
 #!/usr/bin/env ruby
 
-require 'optparse'
+ROOT_PATH=File.dirname(__FILE__)
+$: << File.expand_path(File.join(ROOT_PATH, "..", "lib"))
+$: << File.expand_path(File.join(ROOT_PATH, "..", "lib", "autoflow"))
+$: << File.expand_path(File.join(ROOT_PATH, "..", "lib", "autoflow", "queue_managers"))
 
+require 'optparse'
 require 'autoflow'
+require 'io/console'
+require 'net/ssh'
+require 'queue_manager'
+require 'fileutils'
+
+#################################################################################################
+# METHODS
+#################################################################################################
+def get_templates(string_template)
+        templates = string_template.split(',') 
+        return templates
+end
+
+def get_repositories
+    directories = []
+    directories = ENV['WORKFLOW_REPOSITORY'].split(':') if !ENV['WORKFLOW_REPOSITORY'].nil?
+    return directories
+end
+
+def exit_exec(message)
+        puts message
+        Process.exit(-1)
+end
+
+def list_repository_templates
+        templates = []
+        if !ENV['WORKFLOW_REPOSITORY'].nil?
+                directories = get_repositories
+                directories.each do |dir|
+                        templates.concat(Dir.entries(dir))
+                end
+        end
+        templates.delete('.')
+        templates.delete('..')
+        return templates
+end
+
+def get_template_path(template)
+        path = nil
+        directories = get_repositories
+        directories.each do |dir|
+                if Dir.entries(dir).include?(template)
+                        path = File.join(dir, template) 
+                        break
+                end
+        end       
+        return path
+end
+
+def get_description(path)
+        File.open(path).each do |line|
+                line.chomp!
+                if line =~ /^#=/
+                        line.gsub!('#=','')
+                        puts line
+                end
+        end
+end
+
 #################################################################################################
 # INPUT PARSING
 #################################################################################################
 options = {}
-
+template_file = ''
 optparse = OptionParser.new do |opts|
-        options[:workflow] = FALSE
-        opts.on( '-w', '--workflow FILE', 'Input workflow file' ) do |workflow|
-                options[:workflow] = workflow
+        options[:add] = nil
+        opts.on( '-a', '--add STRING', 'Put a copy of any selected workflow template in repository' ) do |add|
+                options[:add] = add
         end
 
-        options[:use_multinode] = 0 
-        opts.on( '-u', '--use_multinode INTEGER', 'For use several nodes on execution' ) do |use_multinode|
-                options[:use_multinode] = use_multinode
+        options[:batch] = FALSE
+        opts.on( '-b', '--batch', 'Workflow execution using batch' ) do 
+                options[:batch] = TRUE
         end
 
-	options[:retry] = FALSE
-        opts.on( '-r', '--retry', 'input workflow file' ) do 
+        options[:cpus] = 16
+        opts.on( '-c', '--cpus INTEGER', 'Max number of CPUs that can be used in all workflow' ) do |cpus|
+                options[:cpus] = cpus.to_i
+        end
+
+        options[:comment] = FALSE
+        opts.on( '-C', '--comment_main_command', 'Comment first line of main command job' ) do 
+                options[:comment] = TRUE
+        end
+
+        options[:external_dependencies] = []
+        opts.on( '-d', '--external_dependencies STRING', 'The workflow will start when indicated jobs are finished on queue system. Format: \'id1,id2,id3..\'') do |external_dependencies|
+                options[:external_dependencies] = external_dependencies.split(',')
+        end
+
+        options[:retry] = FALSE
+        opts.on( '-f', '--force', 'Execute all jobs, including any job commented with %' ) do 
                 options[:retry] = TRUE
+        end
+
+        options[:graph] = nil
+        opts.on( '-g', '--graph STRING', 'Draw a chart for the template. The workflow is not executed \'t\' use TIDs for box names \'f\' use folder names for boxes.' ) do |graph| 
+                options[:graph] = graph
+        end
+
+        options[:identifier] = FALSE
+        opts.on( '-i', '--job_identifier STRING', 'Identifier tag for each launching script' ) do |identifier|
+                options[:identifier] = identifier
+        end
+
+        options[:key_name] = FALSE
+        opts.on( '-k', '--use_key_name', ' Use job names as folder names' ) do
+                options[:key_name] = TRUE
+        end
+
+        options[:list] = nil
+        opts.on( '-l', '--list_repository STRING', 'List template names in repository') do |name|
+                options[:list] = name
+        end
+
+        options[:memory] = '4gb'
+        opts.on( '-m', '--memory STRING', 'Max memory that can be allocated in a task' ) do |mem|
+                options[:memory] = mem
         end
 
         options[:node_type] = nil
@@ -29,25 +132,61 @@ optparse = OptionParser.new do |opts|
                 options[:node_type] = node_type
         end
 
-        options[:exp_cpu] = 0
-        opts.on( '-e', '--exp_cpu INTEGER', 'Exponent of cpu assigment series' ) do |exp_cpu|
-                options[:exp_cpu] = exp_cpu.to_i
+        options[:output] = 'exec'
+        opts.on( '-o', '--output STRING', 'Define an output folder name' ) do |output|
+                options[:output] = output
         end
 
-        options[:cpus] = 16
-        opts.on( '-c', '--cpus INTEGER', 'Max cpus can be used in all workflow' ) do |cpus|
-                options[:cpus] = cpus.to_i
+        options[:pull] = nil
+        opts.on( '-p', '--pull STRING', 'Get a copy of a workflow template in repository.' ) do |pull|
+                options[:pull] = pull
+        end    
+
+        options[:remote] = FALSE
+        opts.on( '-r', '--remote', 'Connect with remote machine and launch the workflow' ) do 
+                options[:remote] = TRUE
+                puts 'Host to connect and launch workflow:'
+                host = gets.chomp
+                puts 'User:'
+                user = gets.chomp
+                puts 'Password (hidden)'
+                password = STDIN.noecho(&:gets).chomp
+                options[:ssh] = Net::SSH.start(host, user, :password => password, :auth_methods => ['keyboard-interactive'])
+                puts options[:ssh].exec!('hostname')
+        end
+
+        options[:use_ntasks] = FALSE
+        opts.on( '-s', '--use_ntasks', 'Use several nodes on execution' ) do 
+                options[:use_ntasks] = TRUE
         end
 
         options[:time] = '20:00:00'
-        opts.on( '-t', '--time STRING', 'Max time that can be needed in a task' ) do |time|
+        opts.on( '-t', '--time STRING', 'Max time that can be needed in a task. Format: dd-hh:mm:ss' ) do |time|
                 options[:time] = time
         end
 
-        options[:memory] = '4gb'
-        opts.on( '-m', '--memory STRING', 'Max memory can be used in a task' ) do |mem|
-                options[:memory] = mem
+        options[:use_multinode] = 0 
+        opts.on( '-u', '--use_multinode INTEGER', 'For use several nodes on execution' ) do |use_multinode|
+                options[:use_multinode] = use_multinode.to_i
+        end     
+
+
+        options[:verbose] = FALSE
+        opts.on( '-v', '--verbose', 'Show info without launching jobs' ) do 
+                options[:verbose] = TRUE
         end
+
+        options[:Variables] = nil
+        opts.on( '-V', '--Variables STRING', 'Variables to be parsed on template. Format: \'$variable_name1=value1,$variable_name2=value2,...\'' ) do |mem|
+                options[:Variables] = [mem]
+        end
+
+        options[:workflow] = FALSE
+        opts.on( '-w', '--workflow FILE', 'Input workflow file' ) do |workflow|
+                options[:workflow] = workflow
+                template_file = workflow
+        end
+
 
         # Set a banner, displayed at the top of the help screen.
         opts.banner = "Usage: AutoFlow.rb -w worflow_file -c n_cpus \n\n"
@@ -63,28 +202,105 @@ end # End opts
 # parse options and remove from ARGV
 optparse.parse!
 
-if !options[:workflow] 
-	puts 'Workflow file not especified'
-	Process.exit(-1)
-end
-
 #################################################################################################
 # MAIN
 #################################################################################################
-exec_folder=File.join(Dir.pwd,'exec')
-if !File.exists?(exec_folder)
-	Dir.mkdir(exec_folder)
+# List templates
+templates_rep_names = list_repository_templates
+if !options[:list].nil?
+        if options[:list] == 'all'
+                puts templates_rep_names
+        else
+                path = get_template_path(options[:list])
+                get_description(path) if !path.nil?
+        end
+        exit_exec('')
 end
+
+# Get a template
+if !options[:pull].nil?
+        path = get_template_path(options[:pull])
+        if !path.nil?
+                FileUtils.cp(path, Dir.pwd)
+        else
+                exit_exec("Template not found: #{options[:pull]}")
+        end
+        exit_exec('')
+end
+
+# Upload a template
+if !options[:add].nil? && File.exists?(options[:add])
+        directories = get_repositories
+        writable_dirs = []
+        directories.each_with_index do |dir, i|
+                if File.directory?(dir) && File.writable?(dir)
+                       puts "#{i}\t#{dir}"
+                       writable_dirs << dir 
+                end
+        end
+        if !writable_dirs.empty?
+                msg = ''
+                puts "Select a directory"
+                select = gets.chomp.to_i
+                FileUtils.cp(options[:add], writable_dirs[select])
+        else
+                msg = "You don't have a writable directory"
+        end
+        exit_exec(msg)
+end
+
+# Merge templates
+templates = get_templates(options[:workflow])
+options[:workflow] = ''
+options[:identifier] = "#{File.basename(templates.first)}_#{Time.new.to_i}" if !options[:identifier]
+
+if !options[:workflow]
+        exit_exec('Workflow not especified')
+else
+        templates.each do |template|
+                if  !File.exists?(template) && !templates_rep_names.empty? && !templates_rep_names.include?(template)
+                        exit_exec("Workflow not found: #{template}")
+                        Process.exit(-1)
+                else
+                        if File.exists?(template)
+                                path = template
+                        else
+                                path = get_template_path(template)
+                        end
+                        options[:workflow] += File.open(path).read+"\n"
+                end
+        end
+end
+
+# Set local or remote execution
+if options[:remote]
+        main_path = options[:ssh].exec!('pwd').chomp
+else
+        main_path = Dir.pwd
+end
+
+# Set output directory
+if options[:output] == 'exec'
+        exec_folder = File.join(main_path,'exec')
+else
+        exec_folder = options[:output]       
+        exec_folder = File.join(main_path, options[:output]) if exec_folder[0] != '/' && exec_folder[0] != '~'
+end 
 
 #--------------------------------------------------------------------------------
 # Flow parse
 #--------------------------------------------------------------------------------
-stack=Stack.new(exec_folder,options)
-
-#stack.inspect
+stack = Stack.new(exec_folder, options)
+manager = QueueManager.select_queue_manager(stack, options)
+ 
 #--------------------------------------------------------------------------------
 # Flow exec
 #--------------------------------------------------------------------------------
-stack.exec
-
-
+if !options[:graph].nil?
+        stack.draw(template_file, options[:graph])
+else
+        stack.inspect if options[:verbose]
+        stack.comment_main_command if options[:comment]
+        manager.exec
+end
+options[:ssh].close if options[:remote]
