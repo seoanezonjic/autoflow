@@ -1,4 +1,3 @@
-
 require "autoflow/version"
 require "autoflow/stack"
 

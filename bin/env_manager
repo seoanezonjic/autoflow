@@ -2,9 +2,9 @@
 
 # Parse enviroment variables file
 new_values = {}
-env_path = '../env_file' # A level up
+env_path = '../env_file'
 if !File.exists?(env_path)
-	env_path ='env_path' # Local
+	env_path ='env_path'
 	if !File.exists?(env_path)
 		raise 'Enviroment file not found'
 	end
