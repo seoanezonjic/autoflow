@@ -1,0 +1,276 @@
+#! /usr/bin/env ruby
+
+ROOT_PATH=File.dirname(__FILE__)
+$: << File.expand_path(File.join(ROOT_PATH, "..", "lib", "autoflow"))
+$: << File.expand_path(File.join(ROOT_PATH, "..", "lib", "autoflow", "queue_managers"))
+
+require 'autoflow'
+require 'optparse'
+require 'colorize'
+require 'logging'
+require 'json'
+require 'terminal-table'
+require 'queue_manager'
+require 'program'
+
+#################################################################################################
+### METHODS
+#################################################################################################
+
+def report_log(log, initial_flow_attribs, mode, workflow_status, no_size)
+	set_task_state(log, workflow_status)
+	set_time(log)
+	if mode.nil? || mode.upcase == 'ALL'
+		tasks = log
+	else
+		tasks = log.select{|name, attribs| attribs['state'] == mode.upcase}
+	end
+	rows = []
+	tasks.each do |task_name, attribs|
+		job_path = initial_flow_attribs[task_name].first
+		size = nil
+		size = `du -sh #{job_path}`.split.first if !no_size
+		rows << [attribs['state_msg'], File.basename(job_path), attribs['time'], size, task_name]
+	end
+	puts Terminal::Table.new :headings => ['Status', 'Folder', 'Time', 'Size', 'Job Name'], :rows => rows
+end
+
+def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch)
+	options = {
+		:verbose => FALSE,
+		:identifier => nil,
+		:remote => FALSE,
+		:ssh => nil,
+		:external_dependencies => [],
+		:batch => batch,
+		:write_sh => FALSE
+	}
+	failed_jobs = get_failed_jobs(log)
+	jobs = {}
+	create_jobs(jobs, failed_jobs, initial_flow_attribs)
+	get_all_dependencies(jobs, failed_jobs, initial_flow_attribs)
+	manager = QueueManager.select_queue_manager(exec_folder, options, jobs, {})
+	manager.exec
+end
+
+def create_jobs(jobs, failed_jobs, initial_flow_attribs) 
+	failed_jobs.each do |job|
+		folder, dependencies = initial_flow_attribs[job]
+		job_attrib = {
+			:done => FALSE,
+			:folder => TRUE,
+			:buffer => FALSE,
+			:exec_folder => folder,
+			:cpu_asign => nil
+		}
+		verified_dependencies = []
+		dependencies.each do |dep|
+			verified_dependencies << dep if !jobs[dep].nil?
+		end
+		jobs[job] = Program.new(job, '', '', verified_dependencies, job_attrib)
+	end
+end
+
+def get_all_dependencies(jobs, failed_jobs, initial_flow_attribs)
+	failed_dependecies = []
+	failed_jobs.each do |fj|
+		initial_flow_attribs.each do |job, attribs|
+			folder, dependencies = attribs
+			failed_dependecies << job if dependencies.include?(fj) && !failed_dependecies.include?(job)
+		end
+	end
+	if !failed_dependecies.empty?
+		create_jobs(jobs, failed_dependecies, initial_flow_attribs)
+		get_all_dependencies(jobs, failed_dependecies, initial_flow_attribs)
+	end
+end
+
+def get_failed_jobs(log)
+	failed_jobs = [] 
+	position = 0
+	fails = []
+	log.each do |task, attribs|
+		abort = find_failed(attribs['start'], attribs['end'])
+		if !abort.nil?
+			position = abort if abort > position
+			fails << [task, abort]
+		end
+	end
+	if !fails.empty?
+		fails.each do |task, index| 
+			if position == index
+				failed_jobs << task
+			end
+		end
+	end
+	return failed_jobs
+end
+
+def find_failed(ar_start, ar_end)
+	position = nil
+	ar_start.reverse.each_with_index do |st, i|
+		reverse_pos = ar_start.length - i - 1
+		stop = ar_end[reverse_pos]
+		if st > 0 && stop == 0
+			next_executions = ar_end[reverse_pos..ar_end.length - 1]
+			if next_executions.nil? || next_executions.count(0) == next_executions.length
+				position = reverse_pos
+				break 
+			end
+		end
+	end
+	return position
+end
+
+def set_time(log)
+	log.each do |task, attribs|
+		start = attribs['start'].last
+		stop = attribs['end'].last
+		status = attribs['state']
+		time = 0
+		if status == 'SUCC'
+			time = stop - start
+		elsif status == 'RUN'
+			time = Time.now.to_i - start
+		end
+		magnitude = 's'
+		if time >= 60
+			magnitude = 'm'
+			time = time /60.0 # To minutes
+		end
+		if time >= 60 && magnitude == 'm'
+			magnitude = 'h'
+			time = time /60.0 # To hours
+		end
+		if time >= 24 && magnitude == 'h'
+			magnitude = 'd'
+			time = time /24.0 # To days
+		end
+		if time == 0
+			time_string = '-'
+		else
+			time_string = "#{time} #{magnitude}"
+		end
+		attribs['time'] = time_string
+	end
+end
+
+def set_task_state(log, workflow_status, position = -1)
+	log.each do | task, attribs|
+		start_position = attribs['start'].length - position
+		start = attribs['start'][position]
+		stop_position = attribs['end'].length - position
+		stop = attribs['end'][position]
+		if workflow_status # Workflow has finished
+			if start == 0 && stop == 0
+				status = 'NOT'
+				status_msg = 'NOT'.colorize(:blue)
+			elsif start > 0 && stop > 0
+				status = 'SUCC'
+				status_msg = 'SUCC'.colorize(:green)
+			elsif start > 0 && stop ==0
+				status = 'ABORT'
+				status_msg = 'ABORT'.colorize(:red)
+			end				
+		else # Workflow is still running
+			if start == 0 && stop == 0
+				status = 'PEND'
+				status_msg = 'PEND'.colorize(:blue)
+			elsif start > 0 && stop > 0
+				status = 'SUCC'
+				status_msg = 'SUCC'.colorize(:green)
+			elsif start > 0 && stop ==0
+				status = 'RUN'
+				status_msg = 'RUN'.colorize(:magenta)
+			end				
+		end
+		attribs['state'] = status
+		attribs['state_msg'] = status_msg
+	end
+end
+
+def add_timestamp(log_file, attrib, task_name)
+	File.open(log_file, 'a'){|f| f.puts "#{task_name}\t#{attrib}\t#{Time.now.to_i}"}
+end
+
+
+#################################################################################################
+### PARSE OPTIONS
+#################################################################################################
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: __FILE__ [options]"
+
+  options[:workflow_execution] = Dir.pwd
+  opts.on("-e", "--workflow_execution PATH", "Path to workflow directory") do |opt|
+  	current = Dir.pwd
+  	Dir.chdir(opt)
+  	full_path = Dir.pwd
+  	Dir.chdir(current)
+    options[:workflow_execution] = full_path
+  end
+
+  options[:start] = nil
+  opts.on("-s", "--start TASK_NAME", "Write start timestamp of TASK_NAME to log") do |opt|
+    options[:start] = opt
+  end
+
+  options[:finish] = nil
+  opts.on("-f", "--finish TASK_NAME", "Write finish timestamp of TASK_NAME to log") do |opt|
+    options[:finish] = opt
+  end
+
+  options[:report] = nil
+  opts.on("-r", "--report STATUS", "List the status of launched tasks.") do |opt|
+    options[:report] = opt
+  end
+
+  options[:workflow_status] = FALSE
+  opts.on("-w", "--workflow_finished", "When set, logger assumes that the workflow has ended") do |opt|
+    options[:workflow_status] = TRUE
+  end
+  
+  options[:no_size] = FALSE
+  opts.on("-n", "--no_size", "When set, logger don't compute the workflow folder sizes") do |opt|
+    options[:no_size] = TRUE
+  end
+
+	options[:batch] = FALSE
+	opts.on( '-b', '--batch', 'Workflow execution using batch' ) do |opt|
+		options[:batch] = TRUE
+	end
+
+  options[:launch_failed_jobs] = FALSE
+  opts.on("-l", "--launch_failed_jobs", "Launch jobs tagges as ABORT and NOT. This option only works when the -w flag is enabled") do |opt|
+    options[:launch_failed_jobs] = TRUE
+  end  
+end.parse!
+
+#################################################################################################
+### MAIN
+#################################################################################################
+
+log_file = File.join(options[:workflow_execution], 'wf_log')
+job_attribs_file = File.join(options[:workflow_execution], 'wf.json')
+
+if !File.exists?(log_file) 
+	puts "Log file not exists"
+	Process.exit
+end
+if !File.exists?(job_attribs_file)
+	puts "wf.json file not exists"
+	Process.exit
+end
+
+attribs = JSON.parse(File.open(job_attribs_file).read)
+log = parse_log(log_file)
+if !options[:report].nil?
+	report_log(log, attribs, options[:report], options[:workflow_status], options[:no_size])
+elsif !options[:start].nil?
+	add_timestamp(log_file,'start', options[:start])
+elsif !options[:finish].nil?
+	add_timestamp(log_file,'end', options[:finish])
+elsif options[:workflow_status] && options[:launch_failed_jobs]
+	launch_failed_jobs(log, attribs, options[:workflow_execution], options[:batch])
+end

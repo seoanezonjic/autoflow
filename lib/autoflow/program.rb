@@ -1,22 +1,25 @@
 class Program
-	attr_accessor :name, :exec_folder_program, :parameters, :initialization, :queue_id, :done, :dependencies, :monocpu, :end_tasks_buffer
-	def initialize(name, parameters, initialization, iterated, exec_folder_program, dependencies, done, end_tasks_buffer)
-		@name=name
-    		@parameters=parameters
-		@initialization=initialization
-		@exec_folder_program=exec_folder_program
-		@iterated=iterated
-		@queue_id=nil
-		@done=done
-		@dependencies=dependencies
-		@end_tasks_buffer=end_tasks_buffer
-		@monocpu=TRUE
-		if @parameters =~ /\[cpu\]/
-			@monocpu=FALSE
-		end
+	attr_accessor :name, :initialization, :parameters, :dependencies, :attrib, :queue_id, :batch
+
+	def initialize(name, initialization, parameters, dependencies, job_attrib)
+		@name = name
+		@initialization = initialization
+    	@parameters = parameters
+		@dependencies = dependencies
+		@attrib = job_attrib
+		@queue_id = nil
+		@batch = nil
 	end
 
 	def inspect
-		string=@name.to_s+"\t"+@parameters.to_s+"\t"+@exec_folder_program.to_s+"\t"+"\t"+@iterated.to_s
+		if @parameters.class.to_s == 'String'
+			program = @parameters.split(' ').first
+			command = @parameters.gsub("\n","\n\t")
+		else
+			program = 'iterative_job'
+			command = @parameters.map{|b| b}.join(' ')
+		end
+		string="\e[31m#{program}\n\e[0m\t\e[33m#{command}\e[0m\e[34m#{@attrib[:exec_folder]}\e[0m"
 	end
+
 end
