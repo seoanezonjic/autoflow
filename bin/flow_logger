@@ -12,6 +12,7 @@ require 'json'
 require 'terminal-table'
 require 'queue_manager'
 require 'program'
+require 'erb'
 
 #################################################################################################
 ### METHODS
@@ -133,6 +134,7 @@ def set_time(log)
 		elsif status == 'RUN'
 			time = Time.now.to_i - start
 		end
+		attribs['seconds'] = time
 		magnitude = 's'
 		if time >= 60
 			magnitude = 'm'
@@ -193,7 +195,39 @@ def add_timestamp(log_file, attrib, task_name)
 	File.open(log_file, 'a'){|f| f.puts "#{task_name}\t#{attrib}\t#{Time.now.to_i}"}
 end
 
+def report_html(log, initial_flow_attribs)
+	set_task_state(log, TRUE) 
+	set_time(log)
+	report ="
+	<table>
+		<% log.each do |task, attribs| %>
+			<tr>
+				<td><%= task %></td>
+				<td><%= attribs['seconds'] %></td>
+			<tr>
+		<% end %>
+	</table>
+	"
+	data_structure = {
+		'y' =>{ 
+			'vars' => ['Time'],
+			'smps' => log.keys,
+			'data' => [log.values.map{|attribs| attribs['seconds']}],
+			'desc' => ['seconds']
+		},
+		'a' => {
+			"xAxis" => ["Time"]
+		}
+	}
+	#puts log.inspect 
 
+	puts data_structure.inspect
+	#renderer = ERB.new(report)
+	demo = File.open('lines.html').read
+	demo.gsub!('data_structure', data_structure.to_json)
+	renderer = ERB.new(report + "\n" + demo)
+	File.open('report.html', 'w'){|f| f.puts renderer.result()}
+end
 #################################################################################################
 ### PARSE OPTIONS
 #################################################################################################
@@ -204,11 +238,7 @@ OptionParser.new do |opts|
 
   options[:workflow_execution] = Dir.pwd
   opts.on("-e", "--workflow_execution PATH", "Path to workflow directory") do |opt|
-  	current = Dir.pwd
-  	Dir.chdir(opt)
-  	full_path = Dir.pwd
-  	Dir.chdir(current)
-    options[:workflow_execution] = full_path
+    options[:workflow_execution] = File.expand_path(opt)
   end
 
   options[:start] = nil
@@ -244,6 +274,11 @@ OptionParser.new do |opts|
   options[:launch_failed_jobs] = FALSE
   opts.on("-l", "--launch_failed_jobs", "Launch jobs tagges as ABORT and NOT. This option only works when the -w flag is enabled") do |opt|
     options[:launch_failed_jobs] = TRUE
+  end 
+
+  options[:html] = FALSE
+  opts.on("-H", "--html", "Make a workflow execution full report in html format") do |opt|
+    options[:html] = TRUE
   end  
 end.parse!
 
@@ -251,26 +286,30 @@ end.parse!
 ### MAIN
 #################################################################################################
 
-log_file = File.join(options[:workflow_execution], 'wf_log')
-job_attribs_file = File.join(options[:workflow_execution], 'wf.json')
-
-if !File.exists?(log_file) 
-	puts "Log file not exists"
-	Process.exit
-end
-if !File.exists?(job_attribs_file)
-	puts "wf.json file not exists"
-	Process.exit
-end
-
-attribs = JSON.parse(File.open(job_attribs_file).read)
-log = parse_log(log_file)
-if !options[:report].nil?
-	report_log(log, attribs, options[:report], options[:workflow_status], options[:no_size])
-elsif !options[:start].nil?
-	add_timestamp(log_file,'start', options[:start])
+if !options[:start].nil?
+	add_timestamp(options[:workflow_execution],'start', options[:start])
 elsif !options[:finish].nil?
-	add_timestamp(log_file,'end', options[:finish])
-elsif options[:workflow_status] && options[:launch_failed_jobs]
-	launch_failed_jobs(log, attribs, options[:workflow_execution], options[:batch])
+	add_timestamp(options[:workflow_execution],'end', options[:finish])
+else
+	log_folder = File.join(options[:workflow_execution], '.wf_log')
+	job_attribs_file = File.join(options[:workflow_execution], 'wf.json')
+
+	if !Dir.exists?(log_folder) 
+		puts "Log folder not exists"
+		Process.exit
+	end
+	if !File.exists?(job_attribs_file)
+		puts "wf.json file not exists"
+		Process.exit
+	end
+
+	attribs = JSON.parse(File.open(job_attribs_file).read)
+	log = parse_log(log_folder)
+	if !options[:report].nil?
+		report_log(log, attribs, options[:report], options[:workflow_status], options[:no_size])
+	elsif options[:html]
+		report_html(log, attribs)
+	elsif options[:workflow_status] && options[:launch_failed_jobs]
+		launch_failed_jobs(log, attribs, options[:workflow_execution], options[:batch])
+	end
 end

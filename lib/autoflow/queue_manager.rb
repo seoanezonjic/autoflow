@@ -65,10 +65,10 @@ class QueueManager
 	end
 
 	def init_log #TODO adapt to remote execution
-		log_path = [@exec_folder, 'wf_log'].join('/') #Join must assume linux systems so File.join canot be used for windows hosts
-		log = parse_log(log_path)
+		log_path = [@exec_folder, '.wf_log'].join('/') #Join must assume linux systems so File.join canot be used for windows hosts
+		log = parse_log(log_path) #TODO modify to folder
+		job_relations_with_folders = get_relations_and_folders
 		if @write_sh
-			job_relations_with_folders = get_relations_and_folders
 			create_file('wf.json', @exec_folder)
 			write_file('wf.json', job_relations_with_folders.to_json)
 			close_file('wf.json')
@@ -81,7 +81,7 @@ class QueueManager
 				log[task]['set'] << Time.now.to_i
   			end
 		end
-		write_log(log, log_path)
+		write_log(log, log_path, job_relations_with_folders)
 	end
 
 	def get_relations_and_folders
@@ -176,10 +176,11 @@ class QueueManager
 			#Write sh body
 			#--------------------------------
 			write_file(sh_name, 'hostname')
-			write_file(sh_name, "flow_logger -e #{@exec_folder} -s #{job.name}")
+			log_file_path = [@exec_folder, '.wf_log', File.basename(job.attrib[:exec_folder])].join('/')
+			write_file(sh_name, "flow_logger -e #{log_file_path} -s #{job.name}")
 			write_file(sh_name, "source #{File.join(@exec_folder, 'env_file')}") if !@persist_variables.empty?
 			write_job(job, sh_name)
-			write_file(sh_name, "flow_logger -e #{@exec_folder} -f #{job.name}")
+			write_file(sh_name, "flow_logger -e #{log_file_path} -f #{job.name}")
 			write_file(sh_name, "echo 'General time'")
 			write_file(sh_name, "times")
 			close_file(sh_name, 0755)
