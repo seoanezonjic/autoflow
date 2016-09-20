@@ -44,13 +44,15 @@ end
 def write_log(log, log_path, job_relations_with_folders)
 	Dir.mkdir(log_path) if !Dir.exists?(log_path)
 	job_relations_with_folders.each do |name, folder_deps|
-		folder, deps = folder_deps
-		f = File.open([log_path, File.basename(folder)].join('/'), 'w') 
-		log[name].each do |mode, times|
-			times.each do |time|
-				f.puts "#{name}\t#{mode}\t#{time}"
+		if !log[name].nil? #Control check when the wk_log folder has been deleted
+			folder, deps = folder_deps
+			f = File.open([log_path, File.basename(folder)].join('/'), 'w') 
+			log[name].each do |mode, times|
+				times.each do |time|
+					f.puts "#{name}\t#{mode}\t#{time}"
+				end
 			end
+			f.close
 		end
-		f.close
 	end
 end
