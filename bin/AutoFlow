@@ -11,6 +11,7 @@ require 'io/console'
 require 'net/ssh'
 require 'queue_manager'
 require 'fileutils'
+require 'git'
 
 #################################################################################################
 # METHODS
@@ -21,8 +22,13 @@ def get_templates(string_template)
 end
 
 def get_repositories
-    directories = [File.join(ENV['HOME'], 'autoflow_templates')]
+    main_repository = File.join(ENV['HOME'], 'autoflow_templates')
+    local_rep = File.join(main_repository, 'local')
+    remote_rep = File.join(main_repository, 'remote')
+    all_remote = Dir.glob(File.join(remote_rep, '*'))
+    directories = [local_rep]
     directories.concat(ENV['WORKFLOW_REPOSITORY'].split(':')) if !ENV['WORKFLOW_REPOSITORY'].nil?
+    directories.concat(all_remote)
     return directories
 end
 
@@ -39,6 +45,8 @@ def list_repository_templates
         end
         templates.delete('.')
         templates.delete('..')
+        templates.delete('README.md') # From git remote repos
+        templates.delete('.git') # From git remote repos
         return templates
 end
 
@@ -103,6 +111,11 @@ optparse = OptionParser.new do |opts|
         options[:graph] = nil
         opts.on( '-g', '--graph STRING', 'Draw a chart for the template. The workflow is not executed \'t\' use TIDs for box names \'f\' use folder names for boxes.' ) do |graph| 
                 options[:graph] = graph
+        end
+
+        options[:get_template_repository] = nil
+        opts.on( '-G', '--get_template_repository GIT_URL', 'Git url to get template from a remote repository' ) do |url| 
+                options[:get_template_repository] = url
         end
 
         options[:identifier] = FALSE
@@ -204,8 +217,24 @@ optparse.parse!
 # MAIN
 #################################################################################################
 #Create repository
-if !File.exists?(File.join(ENV['HOME'], 'autoflow_templates'))
-    Dir.mkdir(File.join(ENV['HOME'], 'autoflow_templates'))
+main_repository = File.join(ENV['HOME'], 'autoflow_templates')
+local_rep = File.join(main_repository, 'local')
+remote_rep = File.join(main_repository, 'remote')
+Dir.mkdir(main_repository) if !File.exists?(main_repository)
+Dir.mkdir(local_rep) if !File.exists?(local_rep)
+Dir.mkdir(remote_rep) if !File.exists?(remote_rep)
+
+#Move templates from legacy tree folder to current tree folder
+Dir.glob(File.join(main_repository, '*')) { |file| FileUtils.mv(file, local_rep) if file != local_rep && file != remote_rep }
+
+# Get git remote repos and include it in user templates
+if !options[:get_template_repository].nil?
+    fields = options[:get_template_repository].split(/\/+/)
+    repo_name = fields.last.gsub('.git','')
+    repo_author = fields[-2]
+    local_name = "REM_#{repo_author}_#{repo_name}"
+    Git.clone('https://github.com/rosariocarmona/autoflow_templates.git', local_name, :path => remote_rep)
+    exit_exec('Remote template repository added as ' + local_name)
 end
 
 # List templates
