@@ -233,7 +233,7 @@ if !options[:get_template_repository].nil?
     repo_name = fields.last.gsub('.git','')
     repo_author = fields[-2]
     local_name = "REM_#{repo_author}_#{repo_name}"
-    Git.clone('https://github.com/rosariocarmona/autoflow_templates.git', local_name, :path => remote_rep)
+    Git.clone(options[:get_template_repository], local_name, :path => remote_rep)
     exit_exec('Remote template repository added as ' + local_name)
 end
 
