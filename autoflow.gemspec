@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.version       = Autoflow::VERSION
   spec.authors       = ["Pedro Seoane"]
   spec.email         = ["seoanezonjic@hotmail.com"]
-  spec.description   = %q{"Autoflow makes easy to launch big pipelines on a queue system. Only works with SLURM"}
+  spec.description   = %q{"Autoflow makes easy to launch big pipelines on a queue system. Only works with SLURM & PBS"}
   spec.summary       = %q{"This gem take a pipeline and launch it on a queue system"}
   spec.homepage      = ""
   spec.license       = "MIT"
@@ -18,6 +18,11 @@ Gem::Specification.new do |spec|
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
+  spec.add_runtime_dependency 'net-ssh', '>= 2.8.0'
+  spec.add_runtime_dependency 'git', '>= 1.3.0'
+  spec.add_runtime_dependency 'win32console', '>= 1.3.2' if !ENV['OS'].nil? && ENV['OS'].downcase.include?('windows')
+  spec.add_runtime_dependency 'colorize', '~> 0.7.3'
+  spec.add_runtime_dependency 'terminal-table', '~> 1.6.0'
   spec.add_development_dependency "bundler", "~> 1.3"
   spec.add_development_dependency "rake"
 end
