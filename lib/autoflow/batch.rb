@@ -173,8 +173,8 @@ class Batch
 	def scan_resources(command)
 		resources_line = nil
 		command.each_line do |line|
-			line.chomp!
 			if line.include?('resources:')
+				line = line.chomp
 				resources_line = line
 				fields = line.split(' ')
 				fields.each_with_index do |field, index|
