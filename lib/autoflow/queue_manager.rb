@@ -7,6 +7,7 @@ class QueueManager
 		@commands = commands
 		@persist_variables = persist_variables
 		@verbose = options[:verbose]
+		@show_submit = options[:show_submit_command]
 		@job_identifier = options[:identifier]
 		@files = {}
 		@remote = options[:remote]

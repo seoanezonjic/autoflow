@@ -20,6 +20,7 @@ class SlurmManager < QueueManager
 		dependencies = nil
 		dependencies='--dependency=afterok:'+final_dep.join(':') if !final_dep.empty?  
 		cmd = "sbatch #{dependencies} #{job.name}.sh"
+		STDOUT.puts cmd if @show_submit
 		queue_id = get_queue_system_id(system_call(cmd, job.attrib[:exec_folder]))
 		return queue_id
 	end

@@ -171,6 +171,11 @@ optparse = OptionParser.new do |opts|
                 options[:use_ntasks] = TRUE
         end
 
+        options[:show_submit_command] = FALSE
+        opts.on( '-S', '--show_submit_command', 'Show the command line used to submit the job' ) do 
+                options[:show_submit_command] = TRUE
+        end
+
         options[:time] = '20:00:00'
         opts.on( '-t', '--time STRING', 'Max time that can be needed in a task. Format: dd-hh:mm:ss' ) do |time|
                 options[:time] = time
