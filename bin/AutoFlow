@@ -83,9 +83,9 @@ optparse = OptionParser.new do |opts|
                 options[:add] = add
         end
 
-        options[:batch] = FALSE
+        options[:batch] = false
         opts.on( '-b', '--batch', 'Workflow execution using batch' ) do 
-                options[:batch] = TRUE
+                options[:batch] = true
         end
 
         options[:cpus] = 16
@@ -93,9 +93,9 @@ optparse = OptionParser.new do |opts|
                 options[:cpus] = cpus.to_i
         end
 
-        options[:comment] = FALSE
+        options[:comment] = false
         opts.on( '-C', '--comment_main_command', 'Comment first line of main command job' ) do 
-                options[:comment] = TRUE
+                options[:comment] = true
         end
 
         options[:external_dependencies] = []
@@ -103,9 +103,9 @@ optparse = OptionParser.new do |opts|
                 options[:external_dependencies] = external_dependencies.split(',')
         end
 
-        options[:retry] = FALSE
+        options[:retry] = false
         opts.on( '-f', '--force', 'Execute all jobs, including any job commented with %' ) do 
-                options[:retry] = TRUE
+                options[:retry] = true
         end
 
         options[:graph] = nil
@@ -118,14 +118,14 @@ optparse = OptionParser.new do |opts|
                 options[:get_template_repository] = url
         end
 
-        options[:identifier] = FALSE
+        options[:identifier] = false
         opts.on( '-i', '--job_identifier STRING', 'Identifier tag for each launching script' ) do |identifier|
                 options[:identifier] = identifier
         end
 
-        options[:key_name] = FALSE
+        options[:key_name] = false
         opts.on( '-k', '--use_key_name', ' Use job names as folder names' ) do
-                options[:key_name] = TRUE
+                options[:key_name] = true
         end
 
         options[:list] = nil
@@ -153,9 +153,9 @@ optparse = OptionParser.new do |opts|
                 options[:pull] = pull
         end    
 
-        options[:remote] = FALSE
+        options[:remote] = false
         opts.on( '-r', '--remote', 'Connect with remote machine and launch the workflow' ) do 
-                options[:remote] = TRUE
+                options[:remote] = true
                 puts 'Host to connect and launch workflow:'
                 host = gets.chomp
                 puts 'User:'
@@ -166,14 +166,14 @@ optparse = OptionParser.new do |opts|
                 puts options[:ssh].exec!('hostname')
         end
 
-        options[:use_ntasks] = FALSE
+        options[:use_ntasks] = false
         opts.on( '-s', '--use_ntasks', 'Use several nodes on execution' ) do 
-                options[:use_ntasks] = TRUE
+                options[:use_ntasks] = true
         end
 
-        options[:show_submit_command] = FALSE
+        options[:show_submit_command] = false
         opts.on( '-S', '--show_submit_command', 'Show the command line used to submit the job' ) do 
-                options[:show_submit_command] = TRUE
+                options[:show_submit_command] = true
         end
 
         options[:time] = '20:00:00'
@@ -187,9 +187,9 @@ optparse = OptionParser.new do |opts|
         end     
 
 
-        options[:verbose] = FALSE
+        options[:verbose] = false
         opts.on( '-v', '--verbose', 'Show info without launching jobs' ) do 
-                options[:verbose] = TRUE
+                options[:verbose] = true
         end
 
         options[:Variables] = nil
@@ -197,7 +197,7 @@ optparse = OptionParser.new do |opts|
                 options[:Variables] = [mem]
         end
 
-        options[:workflow] = FALSE
+        options[:workflow] = false
         opts.on( '-w', '--workflow FILE', 'Input workflow file' ) do |workflow|
                 options[:workflow] = workflow
                 template_file = workflow
@@ -338,7 +338,7 @@ if !options[:graph].nil?
 else
         stack.inspect if options[:verbose]
         stack.comment_main_command if options[:comment]
-        options[:write_sh] = TRUE # Set in flow logger to FALSE, it is used for relaunch failed jobs 
+        options[:write_sh] = true # Set in flow logger to FALSE, it is used for relaunch failed jobs 
         manager = QueueManager.select_queue_manager(stack.exec_folder, options, stack.jobs, stack.persist_variables)
         manager.exec
 end

@@ -34,9 +34,9 @@ class Batch
 		@initialization = init
 		@main_command = main_command
 		@attrib = {
-			:done => FALSE,
-			:folder => TRUE,
-			:buffer => FALSE,
+			:done => false,
+			:folder => true,
+			:buffer => false,
 			:exec_folder => exec_folder,
 			:cpu_asign => nil # number, list or mono
 		}.merge(@@general_computation_attrib)
@@ -150,13 +150,13 @@ class Batch
 		@@batch_iterator_relations[@name] = @iterator
 	end
 
-	def check_execution_modifiers(name, iter_type = FALSE) #The last paremeter iused to indicate tha name is a iterator not an orignal node name
-		done = FALSE
-		folder = TRUE
-		buffer = FALSE
-		done = TRUE if name.include?('%')
-		folder = FALSE if name.include?('!')
-		buffer = TRUE if name.include?('&')
+	def check_execution_modifiers(name, iter_type = false) #The last paremeter iused to indicate tha name is a iterator not an orignal node name
+		done = false
+		folder = true
+		buffer = false
+		done = true if name.include?('%')
+		folder = false if name.include?('!')
+		buffer = true if name.include?('&')
 		if !iter_type
 			name.gsub!(/&|\!|\%|\)/,'')# Delete function characters
 		else
@@ -191,9 +191,9 @@ class Batch
 					end	
 				end
 				if fields.include?('-s')
-					@attrib[:ntask] = TRUE
+					@attrib[:ntask] = true
 				else
-					@attrib[:ntask] = FALSE
+					@attrib[:ntask] = false
 				end
 			end
 		end
@@ -264,7 +264,7 @@ class Batch
 			@iterator.each_with_index do |iter, num|
 				job_attrib = @attrib.dup
 				if !iter.nil?
-					iter, done, job_attrib[:folder], job_attrib[:buffer] = check_execution_modifiers(iter, TRUE)
+					iter, done, job_attrib[:folder], job_attrib[:buffer] = check_execution_modifiers(iter, true)
 					job_attrib[:done] = done if !@attrib[:done] # To keep attrib priority in batch on job
 				end
 				name = "#{@name}#{iter}"
@@ -357,14 +357,14 @@ class Batch
 	end
 
 	def string_overlap(matched_regions, substr, string)
-		match = FALSE
+		match = false
 		range = get_string_position(substr, string)
 		if !range.empty?
 			matched_regions.each do |start, ending|
 				if (range.first >= start && range.first <= ending) || 
 					(range.last >= start && range.last <= ending) ||
 					(range.first <= start && range.last >= ending)
-					match = TRUE
+					match = true
 					break
 				end
 			end

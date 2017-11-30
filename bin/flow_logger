@@ -36,7 +36,7 @@ def report_log(log, initial_flow_attribs, mode, workflow_status, no_size)
 	puts Terminal::Table.new :headings => ['Status', 'Folder', 'Time', 'Size', 'Job Name'], :rows => rows
 end
 
-def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch)
+def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch, pending = false)
 	options = {
 		:verbose => FALSE,
 		:identifier => nil,
@@ -47,6 +47,7 @@ def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch)
 		:write_sh => FALSE
 	}
 	failed_jobs = get_failed_jobs(log)
+	failed_jobs.concat(get_pending_jobs(log, failed_jobs, initial_flow_attribs)) if pending
 	jobs = {}
 	create_jobs(jobs, failed_jobs, initial_flow_attribs)
 	get_all_dependencies(jobs, failed_jobs, initial_flow_attribs)
@@ -86,8 +87,24 @@ def get_all_dependencies(jobs, failed_jobs, initial_flow_attribs)
 	end
 end
 
+def get_pending_jobs(log, failed_jobs, initial_flow_attribs)
+	pending = []
+	log.each do |task, attribs|
+		if attribs['start'].last == 0  && attribs['end'].last == 0
+			pending << task
+		end
+	end
+	pending_to_launch = [] #PENDING jobs that for some reason has not been launched although their depedencies has been executed succesful.
+	pending.each do |job|
+		folder, dependencies = initial_flow_attribs[job]
+		if (dependencies & failed_jobs).length == 0 || (dependencies & pending).length == 0
+			pending_to_launch << job
+		end
+	end
+	return pending_to_launch
+end
+
 def get_failed_jobs(log)
-	failed_jobs = [] 
 	position = 0
 	fails = []
 	log.each do |task, attribs|
@@ -97,13 +114,7 @@ def get_failed_jobs(log)
 			fails << [task, abort]
 		end
 	end
-	if !fails.empty?
-		fails.each do |task, index| 
-			if position == index
-				failed_jobs << task
-			end
-		end
-	end
+	failed_jobs = fails.select{|task, index| index == position}.map{|t, i| t}
 	return failed_jobs
 end
 
@@ -256,29 +267,34 @@ OptionParser.new do |opts|
     options[:report] = opt
   end
 
-  options[:workflow_status] = FALSE
+  options[:workflow_status] = false
   opts.on("-w", "--workflow_finished", "When set, logger assumes that the workflow has ended") do |opt|
-    options[:workflow_status] = TRUE
+    options[:workflow_status] = true
   end
   
-  options[:no_size] = FALSE
+  options[:no_size] = false
   opts.on("-n", "--no_size", "When set, logger don't compute the workflow folder sizes") do |opt|
-    options[:no_size] = TRUE
+    options[:no_size] = true
   end
 
-	options[:batch] = FALSE
+	options[:batch] = false
 	opts.on( '-b', '--batch', 'Workflow execution using batch' ) do |opt|
-		options[:batch] = TRUE
+		options[:batch] = true
 	end
 
-  options[:launch_failed_jobs] = FALSE
-  opts.on("-l", "--launch_failed_jobs", "Launch jobs tagges as ABORT and NOT. This option only works when the -w flag is enabled") do |opt|
-    options[:launch_failed_jobs] = TRUE
+  options[:launch_failed_jobs] = false
+  opts.on("-l", "--launch_failed_jobs", "Launch jobs tagged as ABORT and NOT. This option only works when the -w flag is enabled") do |opt|
+    options[:launch_failed_jobs] = true
   end 
 
-  options[:html] = FALSE
+  options[:pending] = false
+  opts.on("-p", "--pending", "Launch jobs tagged as NOT. This option only works when the -w flag is enabled") do |opt|
+    options[:pending] = true
+  end 
+
+  options[:html] = false
   opts.on("-H", "--html", "Make a workflow execution full report in html format") do |opt|
-    options[:html] = TRUE
+    options[:html] = true
   end  
 end.parse!
 
@@ -310,6 +326,6 @@ else
 	elsif options[:html]
 		report_html(log, attribs)
 	elsif options[:workflow_status] && options[:launch_failed_jobs]
-		launch_failed_jobs(log, attribs, options[:workflow_execution], options[:batch])
+		launch_failed_jobs(log, attribs, options[:workflow_execution], options[:batch], options[:pending])
 	end
 end

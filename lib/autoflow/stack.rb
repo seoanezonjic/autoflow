@@ -44,14 +44,14 @@ class Stack
 		persist_variables_lines = []
 		node_lines = []
 
-		node_beg = FALSE		
+		node_beg = false		
 		@workflow.each_line do |line|
-			node_beg = TRUE if line.include?('{') 	# This check the context of a variable
+			node_beg = true if line.include?('{') 	# This check the context of a variable
 			if line.include?('}')					# if a variable is within a node,
 				if node_beg							# we consider tha is a bash variable not a static autoflow variable
-					node_beg = FALSE
+					node_beg = false
 				else
-					node_beg = TRUE
+					node_beg = true
 				end
 			end
 			if line =~ /^\$/ && !node_beg
