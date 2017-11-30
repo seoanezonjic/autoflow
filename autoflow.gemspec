@@ -23,6 +23,7 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency 'win32console', '>= 1.3.2' if !ENV['OS'].nil? && ENV['OS'].downcase.include?('windows')
   spec.add_runtime_dependency 'colorize', '~> 0.7.3'
   spec.add_runtime_dependency 'terminal-table', '~> 1.6.0'
+  spec.add_runtime_dependency 'openssl', '>= 2.0.6'
   spec.add_development_dependency "bundler", "~> 1.3"
   spec.add_development_dependency "rake"
 end
