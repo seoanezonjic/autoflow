@@ -336,8 +336,10 @@ class Batch
 					@dependencies << [name, '1to1', "!#{name}*!"]
 				end
 				if command.include?("!#{name}!") && !string_overlap(matched_regions, "!#{name}!", command)
-					command =~ /!#{name}!([^ \n]+)/
-					@dependencies << [name, '*to1', "!#{name}!", $1]
+					#command =~ /!#{name}!([^ \n]+)/
+					command.scan(/!#{name}!([^ \n]+)/).each do |string_match|
+						@dependencies << [name, '*to1', "!#{name}!", string_match.first]
+					end
 				end
 				local_dependencies = command.scan(/#{name}([^\( \n]+)\)/)
 				local_dependencies.each do |local_dependency|
