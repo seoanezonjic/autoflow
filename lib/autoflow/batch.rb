@@ -4,7 +4,7 @@ class Batch
 	@@all_batch = {}
 	@@jobs_names = []
 	@@batch_iterator_relations = {}
-	@@state_iterations = {}
+	@@nested_iteration_relations = {}
 	@@general_computation_attrib = {
 		:cpu => nil, 
 		:mem => nil, 
@@ -20,6 +20,7 @@ class Batch
 
 
 	def initialize(tag, init, main_command, id, exec_folder)
+		@regex_deps = nil
 		replace_regexp(tag, init, main_command)
 		@name = nil
 		@id = id
@@ -63,6 +64,7 @@ class Batch
 		data = /!JobRegExp:([^ \n]+):([^ \n]+)!([^ \n]+)/.match(command) # *to1 with regexp
 		#data[0] => reference string (command), data[1] => batch_pattern, data[2] => iterator_pattern, data[3] => adyacent string to regexp as regexp/file_name
 		job_names = get_dependencies_by_regexp(data[1], data[2])
+		@regex_deps = 'command' if job_names.length > 0
 		new_string = job_names.map{|jn| jn + ')' + data[3] }.join(' ')
 		command.gsub!(data[0], new_string)
 		#puts command.inspect
@@ -72,6 +74,9 @@ class Batch
 		data = /JobRegExp:([^ \n]+):([^;\] \n]+)/.match(tag) # 1to1 with regexp
 		#data[0] => reference string (command), data[1] => batch_pattern, data[2] => iterator_pattern
 		job_names = get_dependencies_by_regexp(data[1], data[2])
+		if job_names.length > 0
+			@regex_deps = 'tag' 
+		end
 		new_string = job_names.map{|jn| jn + ')'}.join(';')
 		tag.gsub!(data[0], new_string)
 	end
@@ -253,6 +258,7 @@ class Batch
 					new_job = duplicate_job(tmp_j, iter)
 					check_dependencies(new_job, iter, temp_jobs)
 					parse_iter(iter, @name, new_job)
+					add_nested_iteration_relation(tmp_j, new_job)
 					@@jobs_names << new_job.name
 					jobs << new_job
 					@jobs << new_job
@@ -261,6 +267,7 @@ class Batch
 			end
 			temp_jobs = delete_jobs(jobs2delete, temp_jobs) #Remove temporal jobs
 		else
+			check_regex_dependencies
 			@iterator.each_with_index do |iter, num|
 				job_attrib = @attrib.dup
 				if !iter.nil?
@@ -281,6 +288,47 @@ class Batch
 			end
 		end
 		return jobs
+	end
+
+	def add_nested_iteration_relation(tmp_j, new_job)
+		query = @@nested_iteration_relations[tmp_j.name]
+		if query.nil?
+			@@nested_iteration_relations[tmp_j.name] = [new_job.name]
+		else
+			query << new_job.name
+		end
+	end
+
+	def check_regex_dependencies
+		if @regex_deps == 'tag'
+			new_job_names = []
+			@iterator.each do |iter|
+				new_names = find_job_names(iter.gsub(')', ''))
+				new_job_names.concat(new_names) 
+			end
+			@iterator = new_job_names.map{|nj| nj + ')'} if !new_job_names.empty?
+		end
+	end
+
+	def find_job_names(name)
+		final_names = []
+		intermediary_names = @@nested_iteration_relations[name]
+		if !intermediary_names.nil?
+			while !intermediary_names.empty?
+				final_names = intermediary_names
+				i_names = []
+				intermediary_names.each do |i_n|
+					query = @@nested_iteration_relations[i_n]
+					i_names.concat(query) if !query.nil?
+				end
+				if !i_names.empty?
+					intermediary_names = i_names
+				else 
+					break
+				end
+			end
+		end
+		return final_names
 	end
 
 	#tmp_j => job to set dependencies in iteration
