@@ -42,7 +42,7 @@ class BashManager < QueueManager
 	end
 
 	def self.available?(options)
-		return TRUE
+		return true
 	end
 
 	def self.priority

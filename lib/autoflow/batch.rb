@@ -307,6 +307,20 @@ class Batch
 				new_job_names.concat(new_names) 
 			end
 			@iterator = new_job_names.map{|nj| nj + ')'} if !new_job_names.empty?
+		elsif @regex_deps == 'command'
+			[@initialization, @main_command].each do |command|
+				patterns = command.scan(/([^\s)]+)\)([^\s]*)/)
+				if !patterns.empty?
+					patterns.each do |putative_job, sufix|
+						job_names = find_job_names(putative_job)
+						if !job_names.empty?
+							new_string = job_names.map{|jn| "#{jn})#{sufix}"}.join(' ')
+							old_string = "#{putative_job})#{sufix}"
+							command.gsub!(old_string, new_string)
+						end
+					end
+				end
+			end
 		end
 	end
 
@@ -361,7 +375,7 @@ class Batch
 	def handle_dependencies(dinamic_variables)
 		[@initialization, @main_command].each do |instructions|
 			if instructions.class.to_s == 'String'
-				scan_dependencies(instructions)
+				#scan_dependencies(instructions) # NOT NECESSARY? REMOVED BY COLLISION CON REGEX SYSTEM. THE DINAMYC VARIABLES ARE NO USED
 				dinamic_variables.concat(collect_dinamic_variables(instructions))
 				@dependencies.concat(check_dependencies_with_DinVar(instructions, dinamic_variables))
 			end

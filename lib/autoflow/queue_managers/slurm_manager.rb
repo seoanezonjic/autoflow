@@ -6,13 +6,15 @@ class SlurmManager < QueueManager
 		else
 			write_file(sh_name, "#SBATCH --ntasks=#{job.attrib[:cpu]}")
 			write_file(sh_name, "#SBATCH --nodes=#{job.attrib[:multinode]}") if job.attrib[:multinode] > 0
-			write_file(sh_name, 'srun hostname -s > workers') if job.attrib[:cpu_asign] == 'list'
 		end
 		write_file(sh_name,	"#SBATCH --mem=#{job.attrib[:mem]}")
 		write_file(sh_name, "#SBATCH --time=#{job.attrib[:time]}")
 		write_file(sh_name,	"#SBATCH --constraint=#{job.attrib[:node]}") if !job.attrib[:node].nil?
 		write_file(sh_name, '#SBATCH --error=job.%J.err')
 		write_file(sh_name, '#SBATCH --output=job.%J.out')
+		if job.attrib[:ntask]
+			write_file(sh_name, 'srun hostname -s > workers') if job.attrib[:cpu_asign] == 'list'
+		end
 	end
 
 	def submit_job(job, ar_dependencies)
@@ -34,9 +36,9 @@ class SlurmManager < QueueManager
 	end
 
 	def self.available?(options)
-		available = TRUE
+		available = true
 		shell_output = system_call("type 'sbatch'", nil, options[:remote], options[:ssh])
-		available = FALSE if shell_output.empty?
+		available = false if shell_output.empty?
 		return available
 	end
 
