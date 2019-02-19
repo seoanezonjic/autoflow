@@ -297,7 +297,7 @@ class Stack
 		end
 		file.puts '}'
 		file.close
-		system('dot -Tpng '+name+representation_type+'.dot -o '+name+representation_type+'.png')
+		system('dot -Tpdf '+name+representation_type+'.dot -o '+name+representation_type+'.pdf')
 	end
 	
 end
