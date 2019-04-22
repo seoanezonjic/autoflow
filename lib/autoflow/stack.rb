@@ -16,8 +16,10 @@ class Stack
 			:time => options[:time],
 			:node => options[:node_type],
 			:multinode => options[:use_multinode],
-			:ntask => options[:use_ntasks]
+			:ntask => options[:use_ntasks],
+			:additional_job_options => options[:additional_job_options]
 		})
+			STDERR.puts options.inspect
 		@@folder_name = :program_name
 		@@folder_name = :job_name if options[:key_name]
 		@commands = {}	

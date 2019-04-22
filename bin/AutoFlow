@@ -83,6 +83,11 @@ optparse = OptionParser.new do |opts|
                 options[:add] = add
         end
 
+        options[:additional_job_options] = nil
+        opts.on( '-A', '--additional_job_options STRING', 'Additional option in queue system jobs. Format: "parameter:value"' ) do |opt|
+                options[:additional_job_options] = opt.split(':')
+        end
+
         options[:batch] = false
         opts.on( '-b', '--batch', 'Workflow execution using batch' ) do 
                 options[:batch] = true

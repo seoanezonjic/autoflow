@@ -11,7 +11,8 @@ class Batch
 		:time => nil,
 		:node => nil,
 		:multinode => nil,
-		:ntask => nil
+		:ntask => nil,
+		:additional_job_options => nil
 	}
  
 	def self.set_general_attrib(attrib_hash)
@@ -193,6 +194,8 @@ class Batch
 						@attrib[:time] = fields[index+1]
 					elsif field == '-u'
 						@attrib[:multinode] = fields[index+1].to_i
+					elsif field == '-A'
+						@attrib[:additional_job_options] = fields[index+1].split(':')
 					end	
 				end
 				if fields.include?('-s')

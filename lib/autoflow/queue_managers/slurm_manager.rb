@@ -1,5 +1,15 @@
 require 'queue_manager'
 class SlurmManager < QueueManager
+	def parse_additional_options(string, attribs)
+		expresions = %w[%C %T %M %N ]
+		values = [attribs[:cpu], attribs[:time], attribs[:mem], attribs[:node]]
+		new_string = string.dup
+		expresions.each_with_index do |exp, i|
+			new_string.gsub!(exp, "#{values[i]}")
+		end
+		return new_string
+	end
+
 	def write_header(id, job, sh_name)
 		if !job.attrib[:ntask]
 			write_file(sh_name, "#SBATCH --cpus=#{job.attrib[:cpu]}")
@@ -12,10 +22,12 @@ class SlurmManager < QueueManager
 		write_file(sh_name,	"#SBATCH --constraint=#{job.attrib[:node]}") if !job.attrib[:node].nil?
 		write_file(sh_name, '#SBATCH --error=job.%J.err')
 		write_file(sh_name, '#SBATCH --output=job.%J.out')
+		write_file(sh_name, "#SBATCH --#{job.attrib[:additional_job_options][0]}=#{parse_additional_options(job.attrib[:additional_job_options][1], job.attrib)}") if !job.attrib[:additional_job_options].nil?
 		if job.attrib[:ntask]
 			write_file(sh_name, 'srun hostname -s > workers') if job.attrib[:cpu_asign] == 'list'
 		end
 	end
+
 
 	def submit_job(job, ar_dependencies)
 		final_dep = get_all_deps(ar_dependencies)
