@@ -19,7 +19,6 @@ class Stack
 			:ntask => options[:use_ntasks],
 			:additional_job_options => options[:additional_job_options]
 		})
-			STDERR.puts options.inspect
 		@@folder_name = :program_name
 		@@folder_name = :job_name if options[:key_name]
 		@commands = {}	
