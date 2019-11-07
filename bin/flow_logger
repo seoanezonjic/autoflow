@@ -296,6 +296,15 @@ OptionParser.new do |opts|
   opts.on("-H", "--html", "Make a workflow execution full report in html format") do |opt|
     options[:html] = true
   end  
+
+	 # Set a banner, displayed at the top of the help screen.
+	opts.banner = "Usage: flow_logger [options] \n\n"
+
+	# This displays the help screen
+	opts.on( '-h', '--help', 'Display this screen' ) do
+	        puts opts
+	        exit
+	end
 end.parse!
 
 #################################################################################################

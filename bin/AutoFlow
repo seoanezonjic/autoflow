@@ -108,6 +108,11 @@ optparse = OptionParser.new do |opts|
                 options[:external_dependencies] = external_dependencies.split(',')
         end
 
+        options[:extended_logging] = false
+        opts.on( '-e', '--extended_logging', 'If set the command /usr/bin/time will be used instead of shell built-in version. Data will be saved in process_data file of task folder' ) do 
+                options[:extended_logging] = true
+        end
+
         options[:retry] = false
         opts.on( '-f', '--force', 'Execute all jobs, including any job commented with %' ) do 
                 options[:retry] = true
