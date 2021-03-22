@@ -77,8 +77,10 @@ class Stack
 				line.gsub!(/\s/,'')
 				pairs = line.split(',')
 				pairs.each do |pair|
-					pair =~ /(.+)=(.+)/
-					variable_type[$1] = $2
+					#pair =~ /(.+)=(.+)/
+					#variable_type[$1] = $2
+					var, value = pair.split('=', 2)
+					variable_type[var] = value
 				end
 			end
 		end
