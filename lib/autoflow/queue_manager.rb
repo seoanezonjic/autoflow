@@ -36,6 +36,7 @@ class QueueManager
 		else
 			queue_manager = select_manager(options)
 		end
+		warn("Selected queue manager: #{queue_manager}")
 		return queue_manager.new(exec_folder, options, jobs, persist_variables)
 	end
 

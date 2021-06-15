@@ -1,5 +1,6 @@
 require 'queue_manager'
 class SlurmManager < QueueManager
+	# SLURM 20 or greater
 	def parse_additional_options(string, attribs)
 		expresions = %w[%C %T %M %N ]
 		values = [attribs[:cpu], attribs[:time], attribs[:mem], attribs[:node]]
@@ -12,7 +13,7 @@ class SlurmManager < QueueManager
 
 	def write_header(id, job, sh_name)
 		if !job.attrib[:ntask]
-			write_file(sh_name, "#SBATCH --cpus=#{job.attrib[:cpu]}")
+			write_file(sh_name, "#SBATCH --cpus-per-task=#{job.attrib[:cpu]}")
 		else
 			write_file(sh_name, "#SBATCH --ntasks=#{job.attrib[:cpu]}")
 			write_file(sh_name, "#SBATCH --nodes=#{job.attrib[:multinode]}") if job.attrib[:multinode] > 0
@@ -53,12 +54,12 @@ class SlurmManager < QueueManager
 		if !shell_output.empty?
 			shell_output = system_call("sbatch --version", nil, options[:remote], options[:ssh])
 			slurm_version = shell_output.split(' ').last.split('.').first.to_i # "slurm 17.11.4"
-			available = true if slurm_version < 20
+			available = true if slurm_version >= 20
 		end
 		return available
 	end
 
 	def self.priority
-		return 120 
+		return 100 
 	end
 end
