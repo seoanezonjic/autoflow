@@ -1,5 +1,5 @@
 require 'queue_manager'
-class SlurmManager < QueueManager
+class SlurmManager2 < QueueManager
 	# SLURM 20 or greater
 	def parse_additional_options(string, attribs)
 		expresions = %w[%C %T %M %N ]
