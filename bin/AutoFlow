@@ -9,7 +9,7 @@ require 'optparse'
 require 'autoflow'
 require 'io/console'
 require 'net/ssh'
-require 'queue_manager'
+#require 'queue_manager'
 require 'fileutils'
 require 'git'
 

@@ -1,5 +1,5 @@
-require 'program'
-require 'batch'
+#require 'program'
+#require 'batch'
 
 require 'win32console' if !ENV['OS'].nil? && ENV['OS'].downcase.include?('windows')
 require 'colorize'

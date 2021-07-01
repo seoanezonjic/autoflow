@@ -7,11 +7,8 @@ $: << File.expand_path(File.join(ROOT_PATH, "..", "lib", "autoflow", "queue_mana
 require 'autoflow'
 require 'optparse'
 require 'colorize'
-require 'logging'
 require 'json'
 require 'terminal-table'
-require 'queue_manager'
-require 'program'
 require 'erb'
 
 #################################################################################################
