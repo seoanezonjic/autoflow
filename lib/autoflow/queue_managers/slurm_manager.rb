@@ -42,8 +42,9 @@ class SlurmManager < QueueManager
 	def get_queue_system_id(shell_output)
 		queue_id = nil
 		shell_output.chomp!
-		fields = shell_output.split(' ')
-		queue_id = fields[3]
+		shell_output =~ /Submitted batch job (\d+)/
+		queue_id = $1
+		raise("A queue id cannot be obtained. The queue manager has given this message:#{shell_output}") if queue_id.nil?
 		return queue_id
 	end
 
