@@ -347,7 +347,6 @@ if !options[:graph].nil?
         stack.draw(template_file, options[:graph])
 else
         stack.inspect if options[:verbose]
-        stack.comment_main_command if options[:comment]
         options[:write_sh] = true # Set in flow logger to FALSE, it is used for relaunch failed jobs 
         manager = QueueManager.select_queue_manager(stack.exec_folder, options, stack.jobs, stack.persist_variables)
         manager.exec

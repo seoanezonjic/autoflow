@@ -225,11 +225,6 @@ class Stack
 		return hash
 	end
 
-	def comment_main_command
-		@jobs.each do |name, job|
-			job.parameters = "##{job.parameters}"
-		end
-	end
 ##########################################################################################
 ## WORKFLOW REPRESENTATION
 ##########################################################################################

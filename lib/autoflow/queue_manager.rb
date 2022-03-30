@@ -15,6 +15,7 @@ class QueueManager
 		@external_dependencies = options[:external_dependencies]
 		@active_jobs = []
 		@extended_logging = options[:extended_logging]
+		@comment = options[:comment]
 	end
 
 	########################################################################################
@@ -268,12 +269,17 @@ class QueueManager
 
 	def write_job(job, sh_name)	
 		write_file(sh_name, job.initialization) if !job.initialization.nil?
-		if @extended_logging
-			log_command = '/usr/bin/time -o process_data -v '
+		if @comment
+			cmd = '#' + job.parameters
 		else
-			log_command = 'time '
+			if @extended_logging
+				log_command = '/usr/bin/time -o process_data -v '
+			else
+				log_command = 'time '
+			end
+			cmd = log_command + job.parameters
 		end
-		write_file(sh_name, log_command + job.parameters)
+		write_file(sh_name, cmd)
 	end
 
 	def get_dependencies(job, id = nil)
