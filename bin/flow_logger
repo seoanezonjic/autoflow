@@ -35,13 +35,13 @@ end
 
 def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch, pending = false)
 	options = {
-		:verbose => FALSE,
+		:verbose => false,
 		:identifier => nil,
-		:remote => FALSE,
+		:remote => false,
 		:ssh => nil,
 		:external_dependencies => [],
 		:batch => batch,
-		:write_sh => FALSE
+		:write_sh => false
 	}
 	failed_jobs = get_failed_jobs(log)
 	failed_jobs.concat(get_pending_jobs(log, failed_jobs, initial_flow_attribs)) if pending
@@ -56,9 +56,9 @@ def create_jobs(jobs, failed_jobs, initial_flow_attribs)
 	failed_jobs.each do |job|
 		folder, dependencies = initial_flow_attribs[job]
 		job_attrib = {
-			:done => FALSE,
-			:folder => TRUE,
-			:buffer => FALSE,
+			:done => false,
+			:folder => true,
+			:buffer => false,
 			:exec_folder => folder,
 			:cpu_asign => nil
 		}
@@ -204,7 +204,7 @@ def add_timestamp(log_file, attrib, task_name)
 end
 
 def report_html(log, initial_flow_attribs)
-	set_task_state(log, TRUE) 
+	set_task_state(log, true) 
 	set_time(log)
 	report ="
 	<table>
