@@ -53,7 +53,7 @@ class SlurmManager < QueueManager
 		shell_output = system_call("type 'sbatch'", nil, options[:remote], options[:ssh])
 		if !shell_output.empty?
 			shell_output = system_call("sbatch --version", nil, options[:remote], options[:ssh])
-			slurm_version = shell_output.split(' ').last.split('.').first.to_i # "slurm 17.11.4"
+			slurm_version = shell_output.scan(/slurm ([0-9\.]+)/).first.first.split('.').first.to_i # "slurm 17.11.4"
 			available = true if slurm_version < 20
 		end
 		return available
