@@ -213,6 +213,10 @@ optparse = OptionParser.new do |opts|
                 template_file = workflow
         end
 
+        options[:sleep_time] = 0
+        opts.on('--sleep FLOAT', 'Time in seconds to wait between jobs queue submmit' ) do |time|
+                options[:sleep_time] = time.to_f
+        end
 
         # Set a banner, displayed at the top of the help screen.
         opts.banner = "Usage: AutoFlow.rb -w worflow_file -c n_cpus \n\n"

@@ -33,7 +33,7 @@ def report_log(log, initial_flow_attribs, mode, workflow_status, no_size)
 	puts Terminal::Table.new :headings => ['Status', 'Folder', 'Time', 'Size', 'Job Name'], :rows => rows
 end
 
-def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch, pending = false)
+def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch, sleep_time, pending = false)
 	options = {
 		:verbose => false,
 		:identifier => nil,
@@ -41,7 +41,8 @@ def launch_failed_jobs(log, initial_flow_attribs, exec_folder, batch, pending = 
 		:ssh => nil,
 		:external_dependencies => [],
 		:batch => batch,
-		:write_sh => false
+		:write_sh => false,
+		:sleep_time => sleep_time
 	}
 	failed_jobs = get_failed_jobs(log)
 	failed_jobs.concat(get_pending_jobs(log, failed_jobs, initial_flow_attribs)) if pending
@@ -294,6 +295,11 @@ OptionParser.new do |opts|
     options[:html] = true
   end  
 
+  options[:sleep_time] = 0
+  opts.on('--sleep FLOAT', 'Time in seconds to wait between jobs queue submmit' ) do |time|
+    options[:sleep_time] = time.to_f
+  end
+
 	 # Set a banner, displayed at the top of the help screen.
 	opts.banner = "Usage: flow_logger [options] \n\n"
 
@@ -332,6 +338,6 @@ else
 	elsif options[:html]
 		report_html(log, attribs)
 	elsif options[:workflow_status] && options[:launch_failed_jobs]
-		launch_failed_jobs(log, attribs, options[:workflow_execution], options[:batch], options[:pending])
+		launch_failed_jobs(log, attribs, options[:workflow_execution], options[:batch], options[:sleep_time], options[:pending])
 	end
 end

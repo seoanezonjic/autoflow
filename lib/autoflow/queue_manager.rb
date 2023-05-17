@@ -16,6 +16,7 @@ class QueueManager
 		@active_jobs = []
 		@extended_logging = options[:extended_logging]
 		@comment = options[:comment]
+		@sleep_time = options[:sleep_time]
 	end
 
 	########################################################################################
@@ -104,6 +105,7 @@ class QueueManager
 		init_log
 		sorted_jobs.each do |name, job|
 			write_file('index_execution', "#{name}\t#{job.attrib[:exec_folder]}") 
+			sleep(@sleep_time) if @sleep_time > 0
 			if job.attrib[:done]
 				next
 			else
