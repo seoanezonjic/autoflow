@@ -85,7 +85,7 @@ class QueueManager
 				log[task]['set'] << Time.now.to_i
   			end
 		end
-		write_log(log, log_path, job_relations_with_folders)
+		write_log(log, log_path, job_relations_with_folders) if !@verbose
 	end
 
 	def get_relations_and_folders
