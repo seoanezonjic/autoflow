@@ -1,8 +1,11 @@
 require 'json'
+require 'digest'
+
 class QueueManager
 
 	def initialize(exec_folder, options, commands, persist_variables)
 		@exec_folder = exec_folder
+		@raw_folder = File.join(exec_folder, '_file')
 		@commands = commands
 		@persist_variables = persist_variables
 		@verbose = options[:verbose]
@@ -17,6 +20,7 @@ class QueueManager
 		@extended_logging = options[:extended_logging]
 		@comment = options[:comment]
 		@sleep_time = options[:sleep_time]
+		@linked_folders = options[:linked_folders]
 	end
 
 	########################################################################################
@@ -45,6 +49,7 @@ class QueueManager
 		queue_manager = nil
 		priority = 0
 		descendants.each do |descendant|
+			puts descendant.inspect
 			if descendant.available?(options) && priority <= descendant.priority
 				queue_manager = descendant
 				priority = descendant.priority
@@ -59,6 +64,13 @@ class QueueManager
 
 	def exec
 		create_folder(@exec_folder)
+		if @linked_folders
+			# We need to know which symbolic links are from commented jobs, so their results will be used and we CANNOT delete their symbolic link
+			commented_jobs_paths = @commands.values.select{|j|j.attrib[:done]}.map{|cj| cj.attrib[:exec_folder]}
+			create_folder(@raw_folder)
+			files = Dir.glob(File.join(@exec_folder, '*'))
+			files.each {|file| File.delete(file) if File.symlink?(file) and !commented_jobs_paths.include?(file)}
+		end
 		make_environment_file if !@persist_variables.empty?
 		create_file('versions', @exec_folder)
 		write_file('versions',"autoflow\t#{Autoflow::VERSION}")
@@ -143,7 +155,14 @@ class QueueManager
 	end
 
 	def launch_job_in_folder(job, id, buffered_jobs)
-		create_folder(job.attrib[:exec_folder])
+		if @linked_folders
+			raw_name = Digest::SHA256.hexdigest(job.name)
+			raw_job_folder = File.join(@raw_folder, raw_name)
+			create_folder(raw_job_folder)
+			File.symlink(raw_job_folder, job.attrib[:exec_folder]) 
+		else
+			create_folder(job.attrib[:exec_folder])
+		end
 		if !job.attrib[:buffer]  # Launch with queue_system the job and all buffered jobs
 			launch2queue_system(job, id, buffered_jobs)
 			buffered_jobs = []#Clean buffer
@@ -249,8 +268,9 @@ class QueueManager
 		return content
 	end
 
-	def system_call(cmd, path = nil)
+	def system_call(cmd, path = nil, show_cmd=false)
 		cmd = "cd #{path}; " + cmd if !path.nil?
+		STDOUT.puts cmd if show_cmd
 		if @remote
 			call = @ssh.exec!(cmd)
 		else
@@ -259,8 +279,9 @@ class QueueManager
 		return call
 	end
 
-	def self.system_call(cmd, path = nil, remote = FALSE, ssh = nil)
+	def self.system_call(cmd, path = nil, remote = false, ssh = nil, show_cmd=false)
 		cmd = "cd #{path}; " + cmd if !path.nil?
+		STDOUT.puts cmd if show_cmd
 		if remote
 			call = ssh.exec!(cmd)
 		else

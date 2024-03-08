@@ -143,7 +143,12 @@ optparse = OptionParser.new do |opts|
                 options[:list] = name
         end
 
-        options[:memory] = '4gb'
+        options[:linked_folders] = false
+        opts.on( '-L', '--linked_folders', 'Use hashed names in folders with symbolic links' ) do
+                options[:linked_folders] = true
+        end
+
+        options[:memory] = '16gb'
         opts.on( '-m', '--memory STRING', 'Max memory that can be allocated in a task' ) do |mem|
                 options[:memory] = mem
         end
