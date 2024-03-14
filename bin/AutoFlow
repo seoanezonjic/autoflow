@@ -85,7 +85,7 @@ optparse = OptionParser.new do |opts|
 
         options[:additional_job_options] = nil
         opts.on( '-A', '--additional_job_options STRING', 'Additional option in queue system jobs. Format: "parameter:value"' ) do |opt|
-                options[:additional_job_options] = opt.split(':')
+                options[:additional_job_options] = opt.split('=')
         end
 
         options[:batch] = false

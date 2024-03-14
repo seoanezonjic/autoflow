@@ -195,7 +195,7 @@ class Batch
 					elsif field == '-u'
 						@attrib[:multinode] = fields[index+1].to_i
 					elsif field == '-A'
-						@attrib[:additional_job_options] = fields[index+1].split(':')
+						@attrib[:additional_job_options] = fields[index+1].split('=')
 					end	
 				end
 				if fields.include?('-s')
